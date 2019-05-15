@@ -27,6 +27,7 @@
 7. [Submit With](#submit-with)
 8. [Conditionals](#conditionals)
 9. [Supporting Additional Views](#supporting-additional-views)
+10. [Real Time Validation](#real-time-validation)
 
 ---
 
@@ -37,7 +38,7 @@ Add this to your module's `build.gradle` file:
 ```gradle
 dependencies {
   
-  implementation 'com.afollestad:vvalidator:0.2.2'
+  implementation 'com.afollestad:vvalidator:0.4.1'
 }
 ```
 
@@ -58,7 +59,6 @@ class MyActivity : AppCompatActivity() {
       input(R.id.your_edit_text) {
         isNotEmpty()
       }
-      
       submitWith(R.id.submit) { result ->
         // this block is only called if form is valid.
         // do something with a valid form state.
@@ -168,7 +168,6 @@ form {
   checkable(R.id.view_id, name = "Optional Name") {
     isChecked()
     isNotChecked()
-    
     // Custom assertions
     assert("expected something") { view -> true }
   }
@@ -188,7 +187,6 @@ form {
     selection().atMost(1)
     selection().atLeast(1)
     selection().greaterThan(1)
-    
     // Custom assertions
     assert("expected something") { view -> true }
   }
@@ -208,7 +206,6 @@ form {
     progress().atMost(1)
     progress().atLeast(1)
     progress().greaterThan(1)
-    
     // Custom assertions
     assert("expected something") { view -> true }
   }
@@ -230,7 +227,6 @@ form {
   input(R.id.some_input) {
     isNotEmpty().description("Please enter a value!")
   }
-  
   spinner(R.id.some_spinner) {
     selection()
       .greaterThan(0)
@@ -266,6 +262,16 @@ val isSuccess: Boolean = result.success()
 val hasErrors: Boolean = result.hasErrors()
 
 val errors: List<FieldError> = result.errors()
+
+val values: List<FieldValue<*>> = result.values()
+val singleValue: FieldValue<*> = result["Field Name"]
+
+singleValue.asString()
+singleValue.asInt()
+singleValue.asLong()
+singleValue.asFloat()
+singleValue.asDouble()
+singleValue.asBoolean()
 ```
 
 Each instance of `FieldError` contains additional information:
@@ -295,7 +301,6 @@ error hook for each field that you can use to display errors in the UI.
 form {
   checkable(R.id.view_id, name = "Optional Name") {
     isChecked() 
-    
     onErrors { view, errors ->
       // `view` here is a CompoundButton.
       // `errors` here is a List<FieldError>, which can be empty to notify that there are no longer 
@@ -386,15 +391,15 @@ assertions and form fields.
 First, you'd need an assertion class that goes with your view.
 
 ```kotlin
-class MyView(context: Context) : View(context, null)
+class MyView(context: Context) : EditText(context, null)
 
 class MyAssertion : Assertion<MyView, MyAssertion>() {
   override fun isValid(view: MyView): Boolean {
-    return true
+    return view.text.isNotEmpty()
   }
 
   override fun defaultDescription(): String {
-    return "does something"
+    return "edit text should not be empty"
   }
 }
 ```
@@ -406,7 +411,7 @@ class MyField(
   container: ValidationContainer,
   view: MyView,
   name: String
-) : FormField<MyField, MyView>(container, id, name) {
+) : FormField<MyField, MyView, CharSequence>(container, id, name) {
   init {
     onErrors { myView, errors ->
       // Do some sort of default error handling with views
@@ -415,6 +420,25 @@ class MyField(
   
   // Your first custom assertion
   fun myAssertion() = assert(MyAssertion())
+  
+  override fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<CharSequence>? {
+    val currentValue = view.text as? CharSequence ?: return null
+    return TextFieldValue(
+        id = id,
+        name = name,
+        value = currentValue
+    )
+  }
+  
+  override fun startRealTimeValidation(debounce: Int) {
+    // See the "Real Time Validation" section below.
+    // You'd want to begin observing input to the view this field attaches to,
+    // and call `validate()` on this field when it changes. You should respect the 
+    // `debounce` parameter as well.
+  }
 }
 ```
 
@@ -458,3 +482,47 @@ form {
 
 When the form is validated, your assertion's `isValid(MyView)` method is executed. If it returns 
 false, this view is marked as erroneous in the validation results.
+
+---
+
+## Real Time Validation
+
+This library provides an option to support real time validation. Rather than performing validation 
+when you call `validate()` on the `Form`, or `validate()` on an individual field, the library 
+makes these calls for you as the view's change. 
+
+```kotlin
+form {
+  useRealTimeValidation()
+  input(R.id.your_edit_text) {
+    isNotEmpty()
+  }
+}
+```
+
+With this example above, the form will automatically perform validation when the input field's 
+text changes. *Note that this does work with all field types, not just input fields.*
+
+`useRealTimeValidation()` has an optional `Int` parameter that lets you set a custom debounce delay. 
+This delay is how much of a gap there is between a field's value changing and validation being 
+performed. This prevents too many validations from occurring in a row, such as a user is typing in 
+an input field - you wouldn't want to validate with every single letter input. *The default value 
+is 500 (milliseconds), or a half second.*
+
+---
+
+Another optional parameter on `useRealTimeValidation() is `disableSubmit`. When true,
+the `submitWith` view or item you set will be enabled or disabled based on the real time 
+valid state of the overall form.
+
+```kotlin
+form {
+  useRealTimeValidation(disableSubmit = true)
+  input(R.id.your_edit_text) {
+    isNotEmpty()
+  }
+  submitWith(R.id.my_button) {
+    // Do something
+  }
+}
+```

@@ -15,6 +15,10 @@
  */
 package com.afollestad.vvalidator.form
 
+import android.app.Activity
+import android.view.View
+import android.widget.Button
+import com.afollestad.vvalidator.ValidationContainer
 import com.afollestad.vvalidator.field.checkable.CheckableField
 import com.afollestad.vvalidator.field.input.InputField
 import com.afollestad.vvalidator.field.input.InputLayoutField
@@ -40,6 +44,8 @@ import com.afollestad.vvalidator.testutil.assertSize
 import com.afollestad.vvalidator.testutil.assertTrue
 import com.afollestad.vvalidator.testutil.assertType
 import com.afollestad.vvalidator.testutil.second
+import com.afollestad.vvalidator.testutil.triggerTextChanged
+import com.afollestad.vvalidator.util.onTextChanged
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -123,10 +129,10 @@ class FormTest {
   }
 
   @Test fun validate() {
-    form.input(ID_INPUT, name = "Input!") {
+    form.input(ID_INPUT, name = "Input") {
       isNotEmpty()
     }
-    form.seeker(ID_SEEKER, name = "Seeker!") {
+    form.seeker(ID_SEEKER, name = "Seeker") {
       progress().greaterThan(1)
     }
     form.getFields()
@@ -142,6 +148,12 @@ class FormTest {
           errors()
               .second()
               .id.assertEqualTo(ID_SEEKER)
+
+          this["Input"]!!.name.assertEqualTo("Input")
+          this["Input"]!!.value.toString()
+              .assertEmpty()
+          this["Seeker"]!!.name.assertEqualTo("Seeker")
+          this["Seeker"]!!.value.assertEqualTo(0)
         }
 
     activity.get()
@@ -208,5 +220,99 @@ class FormTest {
     form.container.assertNull()
     form.getFields()
         .assertEmpty()
+  }
+
+  @Test fun `start - do not use real time validation`() {
+    form.realTimeValidationDebounce.assertEqualTo(-1)
+    form.useRealTimeValidation.assertFalse()
+
+    val dummyField = DummyInputField(activity.get())
+    form.appendField(dummyField)
+    form.start()
+
+    dummyField.assertDidNotStartRealTimeValidation()
+  }
+
+  @Test fun `start - use real time validation`() {
+    form.useRealTimeValidation(2500)
+
+    form.realTimeValidationDebounce.assertEqualTo(2500)
+    form.useRealTimeValidation.assertTrue()
+
+    val dummyField = DummyInputField(activity.get())
+    form.appendField(dummyField)
+    form.start()
+
+    dummyField.assertDidStartRealTimeValidation(2500)
+  }
+
+  @Test fun `start - use real time validation - disable submit with`() {
+    val button = activity.get()
+        .findViewById<Button>(ID_BUTTON)
+    var didSubmit = false
+    form.submitWith(ID_BUTTON) { didSubmit = true }
+    button.isEnabled.assertTrue()
+
+    form.useRealTimeValidation(
+        debounce = 2500,
+        disableSubmit = true
+    )
+
+    val dummyField = DummyInputField(activity.get())
+    form.appendField(dummyField)
+    form.start()
+
+    button.isEnabled.assertFalse()
+    button.performClick()
+    didSubmit.assertFalse()
+
+    dummyField.view.triggerTextChanged("")
+    button.isEnabled.assertFalse()
+    button.performClick()
+    didSubmit.assertFalse()
+
+    dummyField.view.triggerTextChanged("Hello")
+    button.isEnabled.assertTrue()
+    button.performClick()
+    didSubmit.assertTrue()
+  }
+}
+
+class DummyValidationContainer(
+  private val activity: Activity
+) : ValidationContainer(activity) {
+  override fun <T : View> findViewById(id: Int): T? = activity.findViewById(id) as? T
+}
+
+class DummyInputField(
+  activity: Activity
+) : InputField(
+    DummyValidationContainer(activity),
+    activity.findViewById(ID_INPUT),
+    "dummy input"
+) {
+  init {
+    isNotEmpty()
+  }
+
+  private var didStartRealTimeValidation: Boolean = false
+  private var realTimeDebounce: Int? = null
+
+  override fun startRealTimeValidation(debounce: Int) {
+    didStartRealTimeValidation = true
+    realTimeDebounce = debounce
+    view.onTextChanged { validate() }
+  }
+
+  fun assertDidStartRealTimeValidation(withDebounce: Int) {
+    didStartRealTimeValidation.assertTrue()
+    realTimeDebounce.assertEqualTo(withDebounce)
+    didStartRealTimeValidation = false
+    realTimeDebounce = null
+  }
+
+  fun assertDidNotStartRealTimeValidation() {
+    didStartRealTimeValidation.assertFalse()
+    realTimeDebounce.assertNull()
   }
 }

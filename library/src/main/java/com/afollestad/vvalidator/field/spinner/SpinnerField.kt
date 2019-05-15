@@ -17,11 +17,16 @@
 
 package com.afollestad.vvalidator.field.spinner
 
+import android.annotation.SuppressLint
+import android.view.View
+import android.widget.AdapterView
 import android.widget.Spinner
 import com.afollestad.vvalidator.ValidationContainer
 import com.afollestad.vvalidator.assertion.CustomViewAssertion
 import com.afollestad.vvalidator.assertion.spinner.SpinnerAssertions.SelectionAssertion
+import com.afollestad.vvalidator.field.FieldValue
 import com.afollestad.vvalidator.field.FormField
+import com.afollestad.vvalidator.field.IntFieldValue
 
 /**
  * Represents a spinner (dropdown) field.
@@ -32,7 +37,7 @@ class SpinnerField internal constructor(
   container: ValidationContainer,
   view: Spinner,
   name: String?
-) : FormField<SpinnerField, Spinner>(container, view, name) {
+) : FormField<SpinnerField, Spinner, Int>(container, view, name) {
 
   /** Asserts on the spinner's selection. */
   fun selection() = assert(SelectionAssertion())
@@ -42,4 +47,32 @@ class SpinnerField internal constructor(
     description: String,
     matcher: (Spinner) -> Boolean
   ) = assert(CustomViewAssertion(description, matcher))
+
+  /** Returns a snapshot of [Spinner.getSelectedItemPosition]. **/
+  override fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<Int>? {
+    return IntFieldValue(
+        id = id,
+        name = name,
+        value = view.selectedItemPosition
+    )
+  }
+
+  override fun startRealTimeValidation(debounce: Int) {
+    view.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+      override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+
+      @SuppressLint("CheckResult")
+      override fun onItemSelected(
+        parent: AdapterView<*>?,
+        view: View?,
+        position: Int,
+        id: Long
+      ) {
+        validate()
+      }
+    }
+  }
 }

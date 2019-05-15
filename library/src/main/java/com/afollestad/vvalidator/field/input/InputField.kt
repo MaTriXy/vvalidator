@@ -27,19 +27,21 @@ import com.afollestad.vvalidator.assertion.input.InputAssertions.NotEmptyAsserti
 import com.afollestad.vvalidator.assertion.input.InputAssertions.NumberAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.RegexAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.UriAssertion
+import com.afollestad.vvalidator.field.FieldValue
 import com.afollestad.vvalidator.field.FormField
+import com.afollestad.vvalidator.field.TextFieldValue
+import com.afollestad.vvalidator.util.onTextChanged
 
 /**
  * Represents an edit text field.
  *
  * @author Aidan Follestad (@afollestad)
  */
-class InputField internal constructor(
+open class InputField internal constructor(
   container: ValidationContainer,
   view: EditText,
   name: String?
-) : FormField<InputField, EditText>(container, view, name) {
-
+) : FormField<InputField, EditText, CharSequence>(container, view, name) {
   init {
     onErrors { _, errors ->
       view.error = errors.firstOrNull()
@@ -88,4 +90,20 @@ class InputField internal constructor(
     description: String,
     matcher: (EditText) -> Boolean
   ) = assert(CustomViewAssertion(description, matcher))
+
+  /** Returns a snapshot of [EditText.getText]. **/
+  override fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<CharSequence>? {
+    val currentValue = view.text as? CharSequence ?: return null
+    return TextFieldValue(
+        id = id,
+        name = name,
+        value = currentValue
+    )
+  }
+
+  override fun startRealTimeValidation(debounce: Int) =
+    view.onTextChanged(debounce) { validate() }
 }

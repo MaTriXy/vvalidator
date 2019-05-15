@@ -27,13 +27,16 @@ import com.afollestad.vvalidator.ValidationContainer
 import com.afollestad.vvalidator.assertion.Assertion
 import com.afollestad.vvalidator.form.Condition
 import com.afollestad.vvalidator.form.ConditionStack
+import com.afollestad.vvalidator.form.Form
+import com.afollestad.vvalidator.form.FormMarker
 
 typealias FieldBuilder<T> = T.() -> Unit
-
 typealias OnError<V> = (view: V, errors: List<FieldError>) -> Unit
+typealias OnValue<V, T> = (view: V, value: FieldValue<T>) -> Unit
 
 /** @author Aidan Follestad (@afollestad) */
-abstract class FormField<F, V>(
+@FormMarker
+abstract class FormField<F, V : View, T : Any>(
   /** The container which provides Context, view lookup, etc. */
   val container: ValidationContainer,
   /** The view that the field acts on. */
@@ -42,19 +45,21 @@ abstract class FormField<F, V>(
   name: String? = null,
   /** Same as [name] but a string resource way of setting it. */
   @StringRes nameRes: Int? = null
-) where F : FormField<F, V>, V : View {
+) where F : FormField<F, V, T> {
 
   /** The name of the field. The name of the resource ID if not overridden by the user. */
   val name = getFormFieldName(container, name, nameRes, view.id)
+  /** The parent [Form] that the field belongs to. */
+  lateinit var form: Form
 
   private val assertions = mutableListOf<Assertion<V, *>>()
   private val conditionStack = ConditionStack()
 
   internal var onErrors: OnError<V>? = null
+  internal var onValue: OnValue<V, T>? = null
 
   /** Adds an assertion to the field to be used during validation. */
-  @CheckResult
-  fun <T : Assertion<V, *>> assert(assertion: T): T {
+  @CheckResult fun <T : Assertion<V, *>> assert(assertion: T): T {
     assertions.add(assertion.apply {
       this.container = this@FormField.container
       this.conditions = conditionStack.asList()
@@ -63,29 +68,39 @@ abstract class FormField<F, V>(
   }
 
   /** Gets all assertions added to the field. */
-  @CheckResult
-  fun assertions(): List<Assertion<V, *>> = assertions
+  @CheckResult fun assertions(): List<Assertion<V, *>> = assertions
 
   /** Makes inner assertions optional based on a condition. */
   fun conditional(
     condition: Condition,
     builder: F.() -> Unit
-  ) {
+  ): FormField<F, V, T> {
     conditionStack.push(condition)
     @Suppress("UNCHECKED_CAST")
-    builder(this as F)
+    (this as F).builder()
     conditionStack.pop()
+    return this
   }
 
   /** Sets custom logic for displaying errors for the field. */
-  fun onErrors(errors: OnError<V>?) {
+  fun onErrors(errors: OnError<V>?): FormField<F, V, T> {
     this.onErrors = errors
+    return this
+  }
+
+  /** Sets a callback that is invoked when this field becomes validated successfully and has a value. */
+  fun onValue(onValue: OnValue<V, T>?): FormField<F, V, T> {
+    this.onValue = onValue
+    return this
   }
 
   /** Validates the field, returning the result. */
   @CheckResult
-  fun validate(): FieldResult {
-    val result = FieldResult()
+  fun validate(silent: Boolean = false): FieldResult<T> {
+    val result = FieldResult(
+        name = name,
+        value = obtainValue(view.id, name)
+    )
 
     for (assertion in assertions()) {
       if (!assertion.isConditionMet()) {
@@ -102,14 +117,49 @@ abstract class FormField<F, V>(
       }
     }
 
-    propagateErrors(result.errors())
+    propagateErrors(
+        silent = silent,
+        errors = result.errors()
+    )
+    if (!silent) {
+      propagateValue(result.value)
+    }
     return result
   }
 
+  /**
+   * Generates a [FieldValue] instance of the field, should contain a snapshot of the field's
+   * current value.
+   */
+  protected abstract fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<T>?
+
+  /**
+   * The containing [Form] is built, and real time validation was requested. Begin observing
+   * the view and running real-time validation.
+   *
+   * @param debounce The wanted delay between value changes and validation.
+   */
+  abstract fun startRealTimeValidation(debounce: Int)
+
   /** Sends errors through the field's error callback if there is one. */
   @VisibleForTesting(otherwise = PRIVATE)
-  fun propagateErrors(errors: List<FieldError>) {
-    onErrors?.invoke(view, errors)
+  fun propagateErrors(
+    silent: Boolean,
+    errors: List<FieldError>
+  ) {
+    form.setFieldIsValid(this, errors.isEmpty())
+    if (!silent) {
+      onErrors?.invoke(view, errors)
+    }
+  }
+
+  /** Sends value through the field's value callback if there is one. */
+  @VisibleForTesting(otherwise = PRIVATE)
+  fun propagateValue(value: FieldValue<T>?) {
+    value?.let { onValue?.invoke(view, it) }
   }
 }
 

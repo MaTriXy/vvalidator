@@ -22,7 +22,9 @@ import com.afollestad.vvalidator.assertion.input.InputAssertions.ContainsAsserti
 import com.afollestad.vvalidator.assertion.input.InputAssertions.LengthAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.NotEmptyAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.NumberAssertion
+import com.afollestad.vvalidator.form
 import com.afollestad.vvalidator.form.Condition
+import com.afollestad.vvalidator.form.Form
 import com.afollestad.vvalidator.testutil.ID_INPUT
 import com.afollestad.vvalidator.testutil.NoManifestTestRunner
 import com.afollestad.vvalidator.testutil.TestActivity
@@ -46,13 +48,23 @@ private class TestField(
   container: ValidationContainer,
   view: EditText,
   name: String
-) : FormField<TestField, EditText>(container, view, name)
+) : FormField<TestField, EditText, CharSequence>(container, view, name) {
+  override fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<CharSequence>? {
+    return TextFieldValue(id, name, view.text)
+  }
+
+  override fun startRealTimeValidation(debounce: Int) = Unit
+}
 
 /** @author Aidan Follestad (@afollestad) */
 @RunWith(NoManifestTestRunner::class)
 class FormFieldTest {
 
   private lateinit var activity: ActivityController<TestActivity>
+  private lateinit var form: Form
   private lateinit var field: TestField
 
   @Before fun setup() {
@@ -71,6 +83,8 @@ class FormFieldTest {
       }
     }
     field = TestField(container, activity.get().input, "Test Input")
+    form = activity.get()
+        .form { appendField(field) }
   }
 
   @Test fun assert() {
@@ -133,11 +147,21 @@ class FormFieldTest {
     field.onErrors.assertEqualTo(onErrors)
   }
 
+  @Test fun onValue() {
+    val onValue: OnValue<EditText, CharSequence> = { _, _ -> }
+    field.onValue(onValue)
+    field.onValue.assertEqualTo(onValue)
+  }
+
   @Test fun validate() {
     var onErrorsCalled: FieldError? = null
     field.onErrors { view, errors ->
       view.assertEqualTo(field.view)
       onErrorsCalled = errors.singleOrNull()
+    }
+    var emittedValue: FieldValue<CharSequence>? = null
+    field.onValue { _, value ->
+      emittedValue = value
     }
 
     val assertion = NotEmptyAssertion()
@@ -148,6 +172,9 @@ class FormFieldTest {
         .run {
           success().assertFalse()
           hasErrors().assertTrue()
+
+          value!!.value.assertEmpty()
+          emittedValue!!.value.assertEmpty()
 
           val error = errors().single()
           error.id.assertEqualTo(ID_INPUT)
@@ -164,6 +191,11 @@ class FormFieldTest {
           success().assertTrue()
           hasErrors().assertFalse()
           errors().assertEmpty()
+
+          value!!.value.toString()
+              .assertEqualTo("Hello")
+          emittedValue!!.value.toString()
+              .assertEqualTo("Hello")
 
           onErrorsCalled.assertNull()
         }

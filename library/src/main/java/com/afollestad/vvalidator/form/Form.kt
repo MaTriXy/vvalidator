@@ -23,6 +23,7 @@ import android.widget.AbsSeekBar
 import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.Spinner
+import androidx.annotation.CheckResult
 import androidx.annotation.IdRes
 import com.afollestad.vvalidator.ValidationContainer
 import com.afollestad.vvalidator.checkAttached
@@ -37,19 +38,71 @@ import com.afollestad.vvalidator.getViewOrThrow
 import com.google.android.material.textfield.TextInputLayout
 
 typealias FormBuilder = Form.() -> Unit
+typealias GenericFormField = FormField<*, *, *>
+
+@DslMarker
+annotation class FormMarker
 
 /** @author Aidan Follestad (@afollestad) */
+@FormMarker
 class Form internal constructor(validationContainer: ValidationContainer) {
   var container: ValidationContainer? = validationContainer
-  private val fields = mutableListOf<FormField<*, *>>()
+
+  internal var useRealTimeValidation: Boolean = false
+  internal var realTimeValidationDebounce: Int = -1
+  internal var realTimeDisableSubmit: Boolean = false
+
+  internal var realTimeValidMap: MutableMap<GenericFormField, Boolean>? = null
+  internal var submitWith: SubmitWrapper? = null
+
+  private val fields = mutableListOf<GenericFormField>()
+
+  /**
+   * Used by [FormField] in real time validation mode to tell the parent [Form] whether or not
+   * validation is passing. Aids in decision making when [realTimeDisableSubmit] is true.
+   */
+  internal fun setFieldIsValid(
+    field: GenericFormField,
+    valid: Boolean
+  ) {
+    realTimeValidMap?.put(field, valid)
+    submitWith?.isEnabled = !(realTimeValidMap?.any { !it.value } ?: false)
+  }
 
   /** Adds a field to the form. */
-  fun appendField(field: FormField<*, *>) {
-    fields.add(field)
+  @CheckResult fun appendField(field: GenericFormField): GenericFormField {
+    fields.add(field.apply {
+      this.form = this@Form
+    })
+    return field
   }
 
   /** Retrieves fields that have been added to the form. */
-  fun getFields(): List<FormField<*, *>> = fields
+  fun getFields(): List<GenericFormField> = fields
+
+  /**
+   * Enables real-time validation. Views will be observed in real time rather than
+   * waiting for Form submission.
+   *
+   * @param debounce Must be >= 0. Sets a custom delay between a user pausing
+   *  interaction with a view and the view being validated. Defaults to a half second (500).
+   *  NOTE that certain fields can choose to IGNORE this, like a checkbox.
+   * @param disableSubmit When true, the submitWith view is disabled when real time validation
+   *  fails. It's re-enabled when it passes.
+   */
+  fun useRealTimeValidation(
+    debounce: Int = 500,
+    disableSubmit: Boolean = false
+  ): Form {
+    require(debounce >= 0) { "Debounce must be >= 0." }
+    useRealTimeValidation = true
+    realTimeValidationDebounce = debounce
+    if (disableSubmit) {
+      realTimeDisableSubmit = true
+      realTimeValidMap = mutableMapOf()
+    }
+    return this
+  }
 
   /** Adds an input field, which must be a [android.widget.EditText]. */
   fun input(
@@ -57,7 +110,7 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     name: String? = null,
     optional: Boolean = false,
     builder: FieldBuilder<InputField>
-  ) {
+  ): GenericFormField {
     val newField = InputField(
         container = container.checkAttached(),
         view = view,
@@ -66,9 +119,9 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     if (optional) {
       newField.isEmptyOr(builder)
     } else {
-      builder(newField)
+      newField.builder()
     }
-    appendField(newField)
+    return appendField(newField)
   }
 
   /** Adds an input field, which must be a [android.widget.EditText]. */
@@ -93,7 +146,7 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     name: String? = null,
     optional: Boolean = false,
     builder: FieldBuilder<InputLayoutField>
-  ) {
+  ): GenericFormField {
     val newField = InputLayoutField(
         container = container.checkAttached(),
         view = view,
@@ -102,9 +155,9 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     if (optional) {
       newField.isEmptyOr(builder)
     } else {
-      builder(newField)
+      newField.builder()
     }
-    appendField(newField)
+    return appendField(newField)
   }
 
   /**
@@ -128,14 +181,14 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     view: Spinner,
     name: String? = null,
     builder: FieldBuilder<SpinnerField>
-  ) {
+  ): GenericFormField {
     val newField = SpinnerField(
         container = container.checkAttached(),
         view = view,
         name = name
     )
-    builder(newField)
-    appendField(newField)
+    newField.builder()
+    return appendField(newField)
   }
 
   /** Adds a dropdown field, which must be a [android.widget.Spinner]. */
@@ -157,14 +210,14 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     view: CompoundButton,
     name: String? = null,
     builder: FieldBuilder<CheckableField>
-  ) {
+  ): GenericFormField {
     val newField = CheckableField(
         container = container.checkAttached(),
         view = view,
         name = name
     )
-    builder(newField)
-    appendField(newField)
+    newField.builder()
+    return appendField(newField)
   }
 
   /**
@@ -186,14 +239,14 @@ class Form internal constructor(validationContainer: ValidationContainer) {
     view: AbsSeekBar,
     name: String? = null,
     builder: FieldBuilder<SeekField>
-  ) {
+  ): GenericFormField {
     val newField = SeekField(
         container = container.checkAttached(),
         view = view,
         name = name
     )
-    builder(newField)
-    appendField(newField)
+    newField.builder()
+    return appendField(newField)
   }
 
   /** Adds a AbsSeekBar field, like a [android.widget.SeekBar] or [android.widget.RatingBar]. */
@@ -208,10 +261,10 @@ class Form internal constructor(validationContainer: ValidationContainer) {
   )
 
   /** Validates all fields in the form. */
-  fun validate(): FormResult {
+  fun validate(silent: Boolean = false): FormResult {
     val finalResult = FormResult()
     for (field in fields) {
-      val fieldResult = field.validate()
+      val fieldResult = field.validate(silent = silent)
       finalResult += fieldResult
     }
     return finalResult
@@ -244,6 +297,7 @@ class Form internal constructor(validationContainer: ValidationContainer) {
         "Unable to find view ${currentContainer.getFieldName(id)} in your container."
     )
     submitWith(view, onSubmit)
+    this.submitWith = SubmitWrapper(view = view)
   }
 
   /**
@@ -266,6 +320,21 @@ class Form internal constructor(validationContainer: ValidationContainer) {
       }
       true
     }
+    this.submitWith = SubmitWrapper(menuItem = item)
+  }
+
+  /** Signals that the form is finished being built. */
+  @CheckResult internal fun start(): Form {
+    if (useRealTimeValidation) {
+      // Notify all fields that we are using real time validation and they should start observing.
+      fields.forEach { it.startRealTimeValidation(realTimeValidationDebounce) }
+      // Immediately do a validation to see if the submit button should initially be disabled.
+      if (realTimeDisableSubmit && submitWith?.isEnabled == true) {
+        // Silent so that we do not show errors visually.
+        validate(silent = true)
+      }
+    }
+    return this
   }
 
   /** Destroys the form by removing all fields and freeing up references. */

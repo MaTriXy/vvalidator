@@ -49,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     form {
+      useRealTimeValidation(disableSubmit = true)
+
       inputLayout(R.id.input_layout_name, name = "Name") {
         isNotEmpty().description("Enter your name!")
         length().atLeast(3)
@@ -106,8 +108,8 @@ class MainActivity : AppCompatActivity() {
         }
       }
 
-      submitWith(R.id.submit) {
-        toast("Success!")
+      submitWith(R.id.submit) { result ->
+        toast("Success! Hello ${result["Name"]?.value}")
       }
     }
   }

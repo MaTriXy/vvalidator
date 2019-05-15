@@ -41,7 +41,12 @@ data class FieldError(
  *
  * @author Aidan Follestad (@afollestad)
  */
-class FieldResult {
+class FieldResult<T : Any>(
+  /** The name of the field. */
+  val name: String,
+  /** The snapshot value of the field when validation executed. */
+  val value: FieldValue<T>?
+) {
   private val errors = mutableListOf<FieldError>()
 
   /** Returns true if validation passed with no errors. */

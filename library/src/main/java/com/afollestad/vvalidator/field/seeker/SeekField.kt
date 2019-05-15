@@ -21,7 +21,10 @@ import android.widget.AbsSeekBar
 import com.afollestad.vvalidator.ValidationContainer
 import com.afollestad.vvalidator.assertion.CustomViewAssertion
 import com.afollestad.vvalidator.assertion.seeker.SeekBarAssertions.ProgressAssertion
+import com.afollestad.vvalidator.field.FieldValue
 import com.afollestad.vvalidator.field.FormField
+import com.afollestad.vvalidator.field.IntFieldValue
+import com.afollestad.vvalidator.util.onProgressChanged
 
 /**
  * Represents an AbsSeekBar field.
@@ -32,7 +35,7 @@ class SeekField internal constructor(
   container: ValidationContainer,
   view: AbsSeekBar,
   name: String?
-) : FormField<SeekField, AbsSeekBar>(container, view, name) {
+) : FormField<SeekField, AbsSeekBar, Int>(container, view, name) {
 
   /** Asserts on the seeker's progress. */
   fun progress() = assert(ProgressAssertion())
@@ -42,4 +45,19 @@ class SeekField internal constructor(
     description: String,
     matcher: (AbsSeekBar) -> Boolean
   ) = assert(CustomViewAssertion(description, matcher))
+
+  /** Returns a snapshot of [AbsSeekBar.getProgress]. **/
+  override fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<Int>? {
+    return IntFieldValue(
+        id = id,
+        name = name,
+        value = view.progress
+    )
+  }
+
+  override fun startRealTimeValidation(debounce: Int) =
+    view.onProgressChanged(debounce) { validate() }
 }

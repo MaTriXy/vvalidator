@@ -33,10 +33,10 @@ fun FragmentActivity.form(builder: FormBuilder): Form {
   val container = object : ValidationContainer(activity) {
     override fun <T : View> findViewById(id: Int): T? = activity.findViewById(id)
   }
-  val newForm = Form(container)
-  builder(newForm)
-  lifecycle.addObserver(DestroyLifecycleObserver(newForm))
-  return newForm
+  return Form(container)
+      .apply(builder)
+      .also { lifecycle.addObserver(DestroyLifecycleObserver(it)) }
+      .start()
 }
 
 /**
@@ -49,8 +49,8 @@ fun Fragment.form(builder: FormBuilder): Form {
   val container = object : ValidationContainer(activity) {
     override fun <T : View> findViewById(id: Int): T? = view?.findViewById(id)
   }
-  val newForm = Form(container)
-  builder(newForm)
-  lifecycle.addObserver(DestroyLifecycleObserver(newForm))
-  return newForm
+  return Form(container)
+      .apply(builder)
+      .also { lifecycle.addObserver(DestroyLifecycleObserver(it)) }
+      .start()
 }

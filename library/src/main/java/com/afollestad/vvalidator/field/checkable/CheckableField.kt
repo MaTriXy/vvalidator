@@ -21,6 +21,8 @@ import android.widget.CompoundButton
 import com.afollestad.vvalidator.ValidationContainer
 import com.afollestad.vvalidator.assertion.CustomViewAssertion
 import com.afollestad.vvalidator.assertion.checkable.CompoundButtonAssertions.CheckedStateAssertion
+import com.afollestad.vvalidator.field.BooleanFieldValue
+import com.afollestad.vvalidator.field.FieldValue
 import com.afollestad.vvalidator.field.FormField
 
 /**
@@ -32,7 +34,7 @@ class CheckableField internal constructor(
   container: ValidationContainer,
   view: CompoundButton,
   name: String?
-) : FormField<CheckableField, CompoundButton>(container, view, name) {
+) : FormField<CheckableField, CompoundButton, Boolean>(container, view, name) {
 
   /** Asserts the view is checked. */
   fun isChecked() = assert(CheckedStateAssertion(true))
@@ -45,4 +47,20 @@ class CheckableField internal constructor(
     description: String,
     matcher: (CompoundButton) -> Boolean
   ) = assert(CustomViewAssertion(description, matcher))
+
+  /** Return value of [CompoundButton.isChecked] **/
+  override fun obtainValue(
+    id: Int,
+    name: String
+  ): FieldValue<Boolean>? {
+    return BooleanFieldValue(
+        id = id,
+        name = name,
+        value = view.isChecked
+    )
+  }
+
+  override fun startRealTimeValidation(debounce: Int) {
+    view.setOnCheckedChangeListener { _, _ -> validate() }
+  }
 }
