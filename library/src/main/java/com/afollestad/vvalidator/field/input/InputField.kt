@@ -25,6 +25,7 @@ import com.afollestad.vvalidator.assertion.input.InputAssertions.EmailAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.LengthAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.NotEmptyAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.NumberAssertion
+import com.afollestad.vvalidator.assertion.input.InputAssertions.NumberDecimalAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.RegexAssertion
 import com.afollestad.vvalidator.assertion.input.InputAssertions.UriAssertion
 import com.afollestad.vvalidator.field.FieldValue
@@ -37,7 +38,7 @@ import com.afollestad.vvalidator.util.onTextChanged
  *
  * @author Aidan Follestad (@afollestad)
  */
-open class InputField internal constructor(
+open class InputField(
   container: ValidationContainer,
   view: EditText,
   name: String?
@@ -65,7 +66,9 @@ open class InputField internal constructor(
   )
 
   /** Asserts that the input text is a valid web address (HTTP or HTTPS). */
-  fun isUrl() = assert(UriAssertion()).hasScheme("http", "https").that { !it.host.isNullOrEmpty() }
+  fun isUrl() = assert(UriAssertion())
+      .hasScheme("http", "https")
+      .that { !it.host.isNullOrEmpty() }
 
   /** Asserts that the input text is a valid URI. */
   fun isUri() = assert(UriAssertion())
@@ -75,6 +78,9 @@ open class InputField internal constructor(
 
   /** Asserts that the input text is a valid number. */
   fun isNumber() = assert(NumberAssertion())
+
+  /** Asserts that the input text is a valid decimal. */
+  fun isDecimal() = assert(NumberDecimalAssertion())
 
   /** Asserts on the input text length. */
   fun length() = assert(LengthAssertion())

@@ -24,6 +24,7 @@ import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.EmailAsse
 import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.LengthAssertion
 import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.NotEmptyAssertion
 import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.NumberAssertion
+import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.NumberDecimalAssertion
 import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.RegexAssertion
 import com.afollestad.vvalidator.assertion.input.InputLayoutAssertions.UriAssertion
 import com.afollestad.vvalidator.assertion.input.text
@@ -38,7 +39,7 @@ import com.google.android.material.textfield.TextInputLayout
  *
  * @author Aidan Follestad (@afollestad)
  */
-class InputLayoutField internal constructor(
+class InputLayoutField(
   container: ValidationContainer,
   view: TextInputLayout,
   name: String?
@@ -51,9 +52,8 @@ class InputLayoutField internal constructor(
   }
 
   /** The TextInputEditText that's inside of the TextInputLayout. */
-  val editText = view.editText ?: throw IllegalStateException(
-      "TextInputLayout ${container.getFieldName(view.id)} should have a child EditText."
-  )
+  val editText = view.editText
+      ?: error("TextInputLayout ${container.getFieldName(view.id)} should have a child EditText.")
 
   /** Asserts that the input text is not empty. */
   fun isNotEmpty() = assert(NotEmptyAssertion())
@@ -72,7 +72,9 @@ class InputLayoutField internal constructor(
   )
 
   /** Asserts that the input text is a valid web address (HTTP or HTTPS). */
-  fun isUrl() = assert(UriAssertion()).hasScheme("http", "https").that { !it.host.isNullOrEmpty() }
+  fun isUrl() = assert(UriAssertion())
+      .hasScheme("http", "https")
+      .that { !it.host.isNullOrEmpty() }
 
   /** Asserts that the input text is a valid URI. */
   fun isUri() = assert(UriAssertion())
@@ -82,6 +84,9 @@ class InputLayoutField internal constructor(
 
   /** Asserts that the input text is a valid number. */
   fun isNumber() = assert(NumberAssertion())
+
+  /** Asserts that the input text is a valid decimal. */
+  fun isDecimal() = assert(NumberDecimalAssertion())
 
   /** Asserts that the input text contains a string. */
   fun length() = assert(LengthAssertion())
